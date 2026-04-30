@@ -160,9 +160,14 @@ export class TitleScene extends Phaser.Scene {
         this.applyPickRequest(fromSlot, m.colorIndex);
       }
     });
-    this.makeButton(cx, GAME_HEIGHT - 90, 'START GAME', () => this.hostStart());
-    this.makeButton(cx, GAME_HEIGHT - 50, 'BACK', () => { this.cleanupNet(); this.showMenu(); })
-      .setStyle({ backgroundColor: '#3a2a2a' });
+    // Place buttons side by side below color picker, not overlapping
+    const btnY = Math.min(GAME_HEIGHT - 60, y + 120);
+    const btnW = 160;
+    const btnGap = 32;
+    this.makeButton(cx - btnW / 2 - btnGap / 2, btnY, 'START GAME', () => this.hostStart())
+      .setStyle({ fontSize: '20px', backgroundColor: '#2a3346', padding: { left: 12, right: 12, top: 6, bottom: 6 } });
+    this.makeButton(cx + btnW / 2 + btnGap / 2, btnY, 'BACK', () => { this.cleanupNet(); this.showMenu(); })
+      .setStyle({ fontSize: '20px', backgroundColor: '#3a2a2a', padding: { left: 12, right: 12, top: 6, bottom: 6 } });
   }
 
   private hostStart(): void {
@@ -203,8 +208,10 @@ export class TitleScene extends Phaser.Scene {
     }
     // Color picker below player list
     this.buildPickTiles(cx, y);
-    this.makeButton(cx, GAME_HEIGHT - 50, 'BACK', () => { this.cleanupNet(); this.showMenu(); })
-      .setStyle({ backgroundColor: '#3a2a2a' });
+    // Only BACK button for join, below color picker
+    const btnY = Math.min(GAME_HEIGHT - 60, y + 120);
+    this.makeButton(cx, btnY, 'BACK', () => { this.cleanupNet(); this.showMenu(); })
+      .setStyle({ fontSize: '20px', backgroundColor: '#3a2a2a', padding: { left: 12, right: 12, top: 6, bottom: 6 } });
   }
 
   // ----- Net events -----
