@@ -113,6 +113,8 @@ export class AttritionBoss implements Hurtbox {
     }
   }
 
+  getAnimName(): string { return this.pickAnimation(); }
+
   private pickAnimation(): string {
     if (this.fsm.is('dead')) return 'defeat';
     if (this.fsm.is('slam')) return 'heavy';

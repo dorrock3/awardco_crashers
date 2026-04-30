@@ -54,15 +54,30 @@ export class GameScene extends Phaser.Scene {
     this.effects = new Effects(this);
     this.game.registry.set('effects', this.effects);
     this.netRole = (this.game.registry.get('netRole') as NetRole) ?? 'solo';
+    if (this.netRole === 'host') {
+      this.effects.broadcastHit = (p) => {
+        getNet().broadcast({ t: 'event', kind: 'hit', payload: p });
+      };
+    }
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, this.scale.height);
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, this.scale.height);
 
     this.backdrop = new ParallaxBackdrop(this, 'office', WORLD_WIDTH);
 
+    // Pull character picks from lobby (slot -> colorIndex). Defaults: slot N -> color (N-1).
+    const picks = (this.game.registry.get('netPicks') as Record<number, number>) ?? {};
+    const heroIds: CharacterId[] = ['hero-red', 'hero-blue', 'hero-green', 'hero-yellow'];
+    const colorForSlot = (slot: number): 0 | 1 | 2 | 3 => {
+      const ci = picks[slot];
+      if (ci !== undefined) return Math.max(0, Math.min(3, ci)) as 0 | 1 | 2 | 3;
+      return ((slot - 1) % 4) as 0 | 1 | 2 | 3;
+    };
+
     // Spawn local player (P1 — always slot 1, keyboard).
+    const p1Color = colorForSlot(1);
     const p1 = new Player(this, this.combat, new KeyboardInputSource(this), this.makePlayerEvents(), {
-      ownerId: 1, colorIndex: 0, x: 100, y: PLAY_FIELD_BOTTOM - 20, lives: STARTING_LIVES,
-      rig: this.makeRig('hero-red')
+      ownerId: 1, colorIndex: p1Color, x: 100, y: PLAY_FIELD_BOTTOM - 20, lives: STARTING_LIVES,
+      rig: this.makeRig(heroIds[p1Color])
     });
     this.players.push(p1);
 
@@ -70,16 +85,15 @@ export class GameScene extends Phaser.Scene {
     // that the host fills from network 'input' messages.
     if (this.netRole === 'host') {
       const peers = (this.game.registry.get('netPeers') as Array<{ playerSlot: number; name: string }>) ?? [];
-      const heroIds: CharacterId[] = ['hero-red', 'hero-blue', 'hero-green', 'hero-yellow'];
       for (const peer of peers) {
         if (peer.playerSlot === 1) continue; // skip host (already spawned)
-        const idx = (peer.playerSlot - 1) % 4;
+        const ci = colorForSlot(peer.playerSlot);
         const remote = new RemoteInputSource();
         this.remoteInputs.set(peer.playerSlot, remote);
         const ply = new Player(this, this.combat, remote, this.makePlayerEvents(), {
-          ownerId: peer.playerSlot, colorIndex: idx as 0 | 1 | 2 | 3,
+          ownerId: peer.playerSlot, colorIndex: ci,
           x: 100 + (peer.playerSlot - 1) * 40, y: PLAY_FIELD_BOTTOM - 20, lives: STARTING_LIVES,
-          rig: this.makeRig(heroIds[idx])
+          rig: this.makeRig(heroIds[ci])
         });
         this.players.push(ply);
       }
@@ -267,7 +281,8 @@ export class GameScene extends Phaser.Scene {
         slot: i + 1,
         x: p.x, y: p.y, facing: p.facing,
         hp: p.hp, lives: p.lives,
-        state: p.getStateName()
+        state: p.getStateName(),
+        anim: p.getAnimName()
       })),
       enemies: [
         ...this.waves.allEnemies(),
@@ -276,14 +291,16 @@ export class GameScene extends Phaser.Scene {
         id: e.ownerId, kind: e.kind,
         x: e.x, y: e.y, facing: e.facing,
         hp: e.hp, maxHp: e.getMaxHp(),
-        state: e.getStateName()
+        state: e.getStateName(),
+        anim: e.getAnimName()
       })),
       projectiles: this.projectiles.filter((p) => p.isAlive()).map((p) => ({
         id: p.id, x: p.x, y: p.y, facing: p.facing, kind: p.kind
       })),
       boss: this.boss ? {
         x: this.boss.x, y: this.boss.y, facing: this.boss.facing,
-        hp: this.boss.hp, maxHp: BOSS_MAX_HP, state: this.boss.getStateName()
+        hp: this.boss.hp, maxHp: BOSS_MAX_HP, state: this.boss.getStateName(),
+        anim: this.boss.getAnimName()
       } : undefined,
       score: this.state.score,
       wave: this.waves.currentIndex,

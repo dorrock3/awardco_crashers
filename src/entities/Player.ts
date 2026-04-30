@@ -167,6 +167,9 @@ export class Player implements Hurtbox {
     }
   }
 
+  /** Public alias for snapshot use. */
+  getAnimName(): string { return this.pickAnimation(); }
+
   private pickAnimation(): string {
     if (this.fsm.is('dead')) return 'defeat';
     if (this.fsm.is('hitstun')) return 'hit';

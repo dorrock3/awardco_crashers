@@ -2,6 +2,10 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../core/constants';
 import { getNet, NetMessage } from '../net/NetTransport';
 
+const HERO_NAMES = ['RED', 'BLUE', 'GREEN', 'YELLOW'];
+const HERO_COLORS = [0xff5a4e, 0x4ea0ff, 0x5ed16a, 0xffc94e];
+const HERO_COLORS_HEX = ['#ff5a4e', '#4ea0ff', '#5ed16a', '#ffc94e'];
+
 /**
  * Title + Lobby scene. Three modes:
  *   - Solo: jump straight into Game (legacy behavior).
@@ -16,7 +20,11 @@ export class TitleScene extends Phaser.Scene {
   private peerListText!: Phaser.GameObjects.Text;
   private offNet?: () => void;
   private offStatus?: () => void;
+  private offHostPick?: () => void;
   private mode: 'menu' | 'host' | 'join' | 'soloPending' = 'menu';
+  /** slot -> colorIndex map (authoritative copy held by host; clients see broadcast). */
+  private picks: Record<number, number> = {};
+  private pickTiles: Phaser.GameObjects.Container | null = null;
 
   constructor() { super('Title'); }
 
@@ -33,8 +41,6 @@ export class TitleScene extends Phaser.Scene {
       fontFamily: 'Arial', fontSize: '16px', color: '#cfd6e4'
     }).setOrigin(0.5);
 
-    this.showMenu();
-
     this.statusText = this.add.text(cx, GAME_HEIGHT - 24, '', {
       fontFamily: 'monospace', fontSize: '12px', color: '#8aa0b8'
     }).setOrigin(0.5);
@@ -42,6 +48,15 @@ export class TitleScene extends Phaser.Scene {
     const net = getNet();
     this.offStatus = net.onStatus((s) => { this.statusText.setText(s); });
     this.offNet = net.on((m) => this.handleNet(m));
+
+    // Auto-join via ?room=ABC123 URL parameter
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = (params.get('room') ?? '').trim().toUpperCase();
+    if (roomParam.length === 6) {
+      this.beginJoinWithCode(roomParam);
+    } else {
+      this.showMenu();
+    }
   }
 
   private clearScreen(): void {
@@ -52,8 +67,11 @@ export class TitleScene extends Phaser.Scene {
         if (t.y >= 150 && t !== this.statusText) t.destroy();
       } else if ((c as Phaser.GameObjects.Rectangle).type === 'Rectangle') {
         c.destroy();
+      } else if (c === this.pickTiles) {
+        c.destroy();
       }
     }
+    this.pickTiles = null;
     this.codeText = undefined as unknown as Phaser.GameObjects.Text;
     this.peerListText = undefined as unknown as Phaser.GameObjects.Text;
   }  private showMenu(): void {
@@ -117,6 +135,19 @@ export class TitleScene extends Phaser.Scene {
     try {
       const code = await getNet().host(name);
       this.codeText.setText(code);
+      this.makeButton(cx + 110, 240, 'COPY LINK', () => this.copyJoinLink(code))
+        .setStyle({ fontSize: '14px', backgroundColor: '#2a3346' });
+      // Host claims slot 1 = RED (index 0) by default; allow re-pick.
+      this.picks = { 1: 0 };
+      this.broadcastPicks();
+      this.buildPickTiles();
+      // Host: route incoming 'pick' messages by sender slot.
+      this.offHostPick?.();
+      this.offHostPick = getNet().on((m, fromSlot) => {
+        if (m.t === 'pick' && getNet().role === 'host') {
+          this.applyPickRequest(fromSlot, m.colorIndex);
+        }
+      });
       this.makeButton(cx, GAME_HEIGHT - 90, 'START GAME', () => this.hostStart());
     } catch (e) {
       this.codeText.setText('FAILED');
@@ -136,10 +167,14 @@ export class TitleScene extends Phaser.Scene {
   // ----- Join -----
 
   private async beginJoin(): Promise<void> {
-    const name = await this.promptName('client');
-    if (!name) { this.showMenu(); return; }
     const code = (await this.promptText('Enter room code:', '', 6)).trim().toUpperCase();
     if (!code) { this.showMenu(); return; }
+    return this.beginJoinWithCode(code);
+  }
+
+  private async beginJoinWithCode(code: string): Promise<void> {
+    const name = await this.promptName('client');
+    if (!name) { this.showMenu(); return; }
     this.mode = 'join';
     this.clearScreen();
     const cx = GAME_WIDTH / 2;
@@ -153,7 +188,8 @@ export class TitleScene extends Phaser.Scene {
 
     try {
       await getNet().join(code, name);
-      this.peerListText.setText('Connected. Waiting for host to start…');
+      this.peerListText.setText('Connected. Pick your hero, then wait for host to start…');
+      this.buildPickTiles();
     } catch (e) {
       this.peerListText.setText(`Failed: ${(e as Error).message}`);
     }
@@ -167,8 +203,12 @@ export class TitleScene extends Phaser.Scene {
   private handleNet(msg: NetMessage): void {
     if (msg.t === 'lobby' || msg.t === 'welcome') {
       this.refreshPeerList();
+      this.refreshPickTiles();
     } else if (msg.t === 'start') {
       this.handleStart();
+    } else if (msg.t === 'picks') {
+      this.picks = { ...msg.picks };
+      this.refreshPickTiles();
     }
   }
 
@@ -189,6 +229,7 @@ export class TitleScene extends Phaser.Scene {
     this.game.registry.set('netRole', net.role);
     this.game.registry.set('netSlot', net.selfSlot);
     this.game.registry.set('netPeers', net.peers);
+    this.game.registry.set('netPicks', this.picks);
     if (net.role === 'client') {
       this.scene.start('Client');
     } else {
@@ -257,8 +298,111 @@ export class TitleScene extends Phaser.Scene {
     }
   }
 
+  // ----- Character picker -----
+
+  private buildPickTiles(): void {
+    if (this.pickTiles) { this.pickTiles.destroy(); this.pickTiles = null; }
+    const cx = GAME_WIDTH / 2;
+    const y = GAME_HEIGHT - 160;
+    const tileW = 60;
+    const gap = 16;
+    const totalW = HERO_NAMES.length * tileW + (HERO_NAMES.length - 1) * gap;
+    const startX = cx - totalW / 2 + tileW / 2;
+    const cont = this.add.container(0, 0);
+    this.pickTiles = cont;
+
+    const label = this.add.text(cx, y - 30, 'PICK YOUR HERO', {
+      fontFamily: 'Impact', fontSize: '14px', color: '#cfd6e4'
+    }).setOrigin(0.5);
+    cont.add(label);
+
+    for (let i = 0; i < HERO_NAMES.length; i++) {
+      const tx = startX + i * (tileW + gap);
+      const rect = this.add.rectangle(tx, y, tileW, tileW, HERO_COLORS[i])
+        .setStrokeStyle(3, 0x000000).setInteractive({ useHandCursor: true });
+      const txt = this.add.text(tx, y, HERO_NAMES[i], {
+        fontFamily: 'Impact', fontSize: '12px', color: '#000', stroke: '#fff', strokeThickness: 2
+      }).setOrigin(0.5);
+      const claimedBy = this.add.text(tx, y + tileW / 2 + 8, '', {
+        fontFamily: 'monospace', fontSize: '10px', color: HERO_COLORS_HEX[i]
+      }).setOrigin(0.5, 0);
+      cont.add(rect); cont.add(txt); cont.add(claimedBy);
+      rect.on('pointerdown', () => this.requestPick(i));
+      // Tag the rect with its index for refresh
+      (rect as Phaser.GameObjects.Rectangle & { _heroIdx?: number; _claimedTxt?: Phaser.GameObjects.Text })._heroIdx = i;
+      (rect as Phaser.GameObjects.Rectangle & { _heroIdx?: number; _claimedTxt?: Phaser.GameObjects.Text })._claimedTxt = claimedBy;
+    }
+    this.refreshPickTiles();
+  }
+
+  private refreshPickTiles(): void {
+    if (!this.pickTiles) return;
+    const net = getNet();
+    // Build inverse: colorIndex -> slot
+    const colorToSlot: Record<number, number> = {};
+    for (const [slotStr, ci] of Object.entries(this.picks)) {
+      colorToSlot[ci as number] = Number(slotStr);
+    }
+    const peerName = (slot: number): string => net.peers.find((p) => p.playerSlot === slot)?.name ?? `P${slot}`;
+    for (const child of this.pickTiles.list) {
+      const r = child as Phaser.GameObjects.Rectangle & { _heroIdx?: number; _claimedTxt?: Phaser.GameObjects.Text };
+      if (r._heroIdx === undefined) continue;
+      const owner = colorToSlot[r._heroIdx];
+      const isMine = owner === net.selfSlot;
+      r.setStrokeStyle(isMine ? 4 : owner ? 3 : 2, isMine ? 0xffd34a : owner ? 0xffffff : 0x000000);
+      r.setAlpha(owner && !isMine ? 0.55 : 1);
+      if (r._claimedTxt) {
+        r._claimedTxt.setText(owner ? peerName(owner) : '');
+      }
+    }
+  }
+
+  /** Click handler on a tile. Host applies directly; client requests via net. */
+  private requestPick(colorIndex: number): void {
+    const net = getNet();
+    if (net.role === 'host' || net.role === 'solo') {
+      this.applyPickRequest(net.selfSlot, colorIndex);
+    } else {
+      net.sendToHost({ t: 'pick', colorIndex });
+    }
+  }
+
+  /** Host-side: claim if free, otherwise ignore. Re-broadcast picks map. */
+  private applyPickRequest(slot: number, colorIndex: number): void {
+    if (colorIndex < 0 || colorIndex >= HERO_NAMES.length) return;
+    // Refuse if another slot already owns this color
+    for (const [s, c] of Object.entries(this.picks)) {
+      if (c === colorIndex && Number(s) !== slot) return;
+    }
+    // Drop slot's prior claim
+    this.picks = { ...this.picks };
+    delete this.picks[slot];
+    this.picks[slot] = colorIndex;
+    this.broadcastPicks();
+    this.refreshPickTiles();
+  }
+
+  private broadcastPicks(): void {
+    const net = getNet();
+    if (net.role === 'host') {
+      net.broadcast({ t: 'picks', picks: this.picks });
+    }
+  }
+
+  private async copyJoinLink(code: string): Promise<void> {
+    const url = `${window.location.origin}${window.location.pathname}?room=${code}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      this.statusText.setText('Link copied to clipboard!');
+    } catch {
+      // Fallback: show the URL in a prompt overlay
+      this.statusText.setText(url);
+    }
+  }
+
   shutdown(): void {
     this.offNet?.();
     this.offStatus?.();
+    this.offHostPick?.();
   }
 }

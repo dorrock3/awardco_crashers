@@ -29,13 +29,15 @@ export interface PeerInfo {
 // ---------------- Wire messages ----------------
 
 export type NetMessage =
-  | { t: 'hello'; name: string } // client -> host on connect
-  | { t: 'welcome'; slot: number; peers: PeerInfo[] } // host -> client after assign
-  | { t: 'lobby'; peers: PeerInfo[] } // host -> all on roster change
-  | { t: 'start' } // host -> all (begin game)
-  | { t: 'input'; frame: InputFrame; tick: number } // client -> host
-  | { t: 'snap'; tick: number; data: SnapshotPayload } // host -> all
-  | { t: 'event'; kind: string; payload?: unknown }; // host -> all (one-shots)
+  | { t: 'hello'; name: string }
+  | { t: 'welcome'; slot: number; peers: PeerInfo[] }
+  | { t: 'lobby'; peers: PeerInfo[] }
+  | { t: 'start' }
+  | { t: 'pick'; colorIndex: number } // client -> host: requesting a hero color
+  | { t: 'picks'; picks: Record<number, number> } // host -> all: slot -> colorIndex map
+  | { t: 'input'; frame: InputFrame; tick: number }
+  | { t: 'snap'; tick: number; data: SnapshotPayload }
+  | { t: 'event'; kind: string; payload?: unknown };
 
 /** Compact snapshot payload (host -> clients). Kept JSON-serializable so we
  *  can iterate quickly; binary packing is a future optimization. */
@@ -44,19 +46,20 @@ export interface SnapshotPayload {
     slot: number;
     x: number; y: number; facing: 1 | -1;
     hp: number; lives: number;
-    state: string; // 'idle' | 'attacking' | 'hitstun' | 'dead' | etc
+    state: string;
     anim?: string;
   }>;
   enemies: Array<{
-    id: number; kind: string; // 'sad-employee-1' etc
+    id: number; kind: string;
     x: number; y: number; facing: 1 | -1;
     hp: number; maxHp: number;
     state: string;
+    anim?: string;
   }>;
   projectiles: Array<{ id: number; x: number; y: number; facing: 1 | -1; kind: string }>;
-  boss?: { x: number; y: number; facing: 1 | -1; hp: number; maxHp: number; state: string };
+  boss?: { x: number; y: number; facing: 1 | -1; hp: number; maxHp: number; state: string; anim?: string };
   score: number;
-  wave: number; // 0-indexed; -1 = pre-wave, totalWaves = boss
+  wave: number;
   remainingEnemies: number;
   totalWaves: number;
   bossPhase: boolean;
@@ -157,7 +160,10 @@ export class NetTransport {
         // Welcome the new client
         conn.send({ t: 'welcome', slot, peers: this.peers } satisfies NetMessage);
         // Update everyone's lobby
-        this.broadcast({ t: 'lobby', peers: this.peers });
+        const lobbyMsg: NetMessage = { t: 'lobby', peers: this.peers };
+        this.broadcast(lobbyMsg);
+        // Tell the host's own UI too
+        this.emit(lobbyMsg, 1);
         this.emit(msg, slot);
       } else {
         this.emit(msg, slot);
@@ -166,7 +172,9 @@ export class NetTransport {
     conn.on('close', () => {
       this.conns.delete(slot);
       this.peers = this.peers.filter((p) => p.playerSlot !== slot);
-      this.broadcast({ t: 'lobby', peers: this.peers });
+      const lobbyMsg: NetMessage = { t: 'lobby', peers: this.peers };
+      this.broadcast(lobbyMsg);
+      this.emit(lobbyMsg, 1);
       this.status(`Player ${slot} disconnected`);
     });
     conn.on('error', (e) => this.status(`Conn err: ${e.message}`));

@@ -17,6 +17,8 @@ export type HitKind = 'light' | 'medium' | 'heavy';
 export class Effects {
   /** Sim-freeze remaining (ms). GameScene polls this each frame. */
   freezeMs = 0;
+  /** Optional broadcast hook — host installs this so client mirrors hits. */
+  broadcastHit?: (payload: { x: number; y: number; damage: number; kind: HitKind; fatal?: boolean }) => void;
 
   constructor(private readonly scene: Phaser.Scene) {}
 
@@ -38,6 +40,9 @@ export class Effects {
     if (opts.kind === 'heavy' || opts.fatal) {
       this.requestHitStop(opts.fatal ? 110 : 70);
     }
+    // Mirror to clients (host only). Send only the data clients can act on —
+    // they'll re-derive flash via the entity rig from snapshot mapping.
+    this.broadcastHit?.({ x: opts.x, y: opts.y, damage: opts.damage, kind: opts.kind, fatal: opts.fatal });
   }
 
   /** Pop a floating damage number. */

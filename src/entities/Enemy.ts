@@ -154,6 +154,8 @@ export class Enemy implements Hurtbox {
     this.hpBar.fillStyle(color, 1).fillRect(x, y, w * pct, h);
   }
 
+  getAnimName(): string { return this.pickAnimation(); }
+
   private pickAnimation(): string {
     if (this.fsm.is('dead')) return 'defeat';
     if (this.fsm.is('hitstun')) return 'hit';

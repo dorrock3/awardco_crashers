@@ -4,6 +4,7 @@ import { ParallaxBackdrop } from '../level/ParallaxBackdrop';
 import { AssetRegistry, CharacterId, CHARACTER_IDS } from '../render/AssetRegistry';
 import { RiggedSprite } from '../render/RiggedSprite';
 import { KeyboardInputSource } from '../core/Input';
+import { Effects } from '../effects/Effects';
 import { getNet, NetMessage, SnapshotPayload } from '../net/NetTransport';
 
 const HERO_COLORS = [0xff5a4e, 0x4ea0ff, 0x5ed16a, 0xffc94e];
@@ -14,6 +15,7 @@ interface Ghost {
   rect: Phaser.GameObjects.Rectangle;
   hpBar?: Phaser.GameObjects.Graphics;
   lastSeenTick: number;
+  lastAnim?: string;
 }
 
 /**
@@ -42,6 +44,7 @@ export class ClientScene extends Phaser.Scene {
   private keyboard!: KeyboardInputSource;
   private inputTick = 0;
   private inputAccumMs = 0;
+  private effects!: Effects;
 
   constructor() { super('Client'); }
 
@@ -52,6 +55,8 @@ export class ClientScene extends Phaser.Scene {
 
     this.buildHud();
     this.keyboard = new KeyboardInputSource(this);
+    this.effects = new Effects(this);
+    this.game.registry.set('effects', this.effects);
 
     // Subscribe to snapshots
     const net = getNet();
@@ -79,6 +84,13 @@ export class ClientScene extends Phaser.Scene {
     if (msg.t === 'snap') {
       this.latestSnap = msg.data;
       this.currentTick = msg.tick;
+    } else if (msg.t === 'event' && msg.kind === 'hit') {
+      const p = msg.payload as { x: number; y: number; damage: number; kind: 'light' | 'medium' | 'heavy'; fatal?: boolean };
+      // Replay juice locally: damage number + screen shake + (light) hit-stop
+      this.effects.damageNumber(p.x, p.y, p.damage, p.fatal ? 'crit' : p.kind);
+      const intensity = p.kind === 'heavy' || p.fatal ? 0.012 : p.kind === 'medium' ? 0.006 : 0.003;
+      const dur = p.kind === 'heavy' || p.fatal ? 220 : p.kind === 'medium' ? 120 : 70;
+      this.effects.shake(intensity, dur);
     }
   }
 
@@ -102,13 +114,15 @@ export class ClientScene extends Phaser.Scene {
     for (const ps of s.players) {
       let g = this.playerGhosts.get(ps.slot);
       if (!g) {
-        const colorId = (`hero-${(['red', 'blue', 'green', 'yellow'][ps.slot - 1] ?? 'red')}`) as CharacterId;
-        g = this.makeGhost(ps.x, ps.y, HERO_COLORS[(ps.slot - 1) % 4], CHARACTER_IDS.includes(colorId) ? colorId : undefined);
+        const picks = (this.game.registry.get('netPicks') as Record<number, number>) ?? {};
+        const ci = picks[ps.slot] ?? ((ps.slot - 1) % 4);
+        const colorName = ['red', 'blue', 'green', 'yellow'][ci] ?? 'red';
+        const colorId = (`hero-${colorName}`) as CharacterId;
+        g = this.makeGhost(ps.x, ps.y, HERO_COLORS[ci % 4], CHARACTER_IDS.includes(colorId) ? colorId : undefined);
         this.playerGhosts.set(ps.slot, g);
       }
       g.lastSeenTick = this.currentTick;
-      this.applyGhost(g, ps.x, ps.y, ps.facing);
-      // Dim if dead
+      this.applyGhost(g, ps.x, ps.y, ps.facing, ps.anim);
       g.rect.setAlpha(ps.hp <= 0 ? 0.25 : 1);
     }
 
@@ -124,7 +138,7 @@ export class ClientScene extends Phaser.Scene {
         this.enemyGhosts.set(e.id, g);
       }
       g.lastSeenTick = this.currentTick;
-      this.applyGhost(g, e.x, e.y, e.facing);
+      this.applyGhost(g, e.x, e.y, e.facing, e.anim);
       this.drawEnemyHp(g, e.x, e.y, e.hp, e.maxHp);
       if (e.state === 'dead' || e.hp <= 0) {
         g.rect.setAlpha(0.15);
@@ -163,7 +177,7 @@ export class ClientScene extends Phaser.Scene {
         this.bossGhost = this.makeGhost(s.boss.x, s.boss.y, 0x3a1f4a, 'attrition');
         this.bossBarG = this.add.graphics().setScrollFactor(0).setDepth(2001);
       }
-      this.applyGhost(this.bossGhost, s.boss.x, s.boss.y, s.boss.facing);
+      this.applyGhost(this.bossGhost, s.boss.x, s.boss.y, s.boss.facing, s.boss.anim);
       this.drawBossBar(s.boss.hp, s.boss.maxHp);
     }
 
@@ -203,12 +217,16 @@ export class ClientScene extends Phaser.Scene {
     return { rect, rig, lastSeenTick: this.currentTick };
   }
 
-  private applyGhost(g: Ghost, x: number, y: number, facing: 1 | -1): void {
+  private applyGhost(g: Ghost, x: number, y: number, facing: 1 | -1, anim?: string): void {
     g.rect.setPosition(x, y);
     g.rect.setScale(facing, 1);
     if (g.rig) {
       g.rig.setPosition(x, y + 30);
       g.rig.setFacing(facing);
+      if (anim && anim !== g.lastAnim) {
+        g.rig.play(anim);
+        g.lastAnim = anim;
+      }
       g.rig.tick(16);
     }
   }
