@@ -1,0 +1,21 @@
+{
+  "name": "awardco-crashers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "art": "tsx scripts/generate-art.ts"
+  },
+  "dependencies": {
+    "peerjs": "^1.5.5",
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.10"
+  }
+}

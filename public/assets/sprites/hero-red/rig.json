@@ -1,0 +1,98 @@
+{
+  "_comment": "All five part PNGs are exported at the original full canvas size (1024x768) with each limb in its proper position. Stacking them all at pivot bottom-center reproduces the original full image exactly. Real per-limb rotation would require trimming each PNG to just that limb; for now we animate the whole rig with bob/lean.",
+  "id": "hero-red",
+  "scale": 0.18,
+  "parts": {
+    "torso":  { "tex": "torso.png",  "pivot": [0.5, 1.0] },
+    "arm_l":  { "tex": "arm_l.png",  "pivot": [0.5, 1.0] },
+    "arm_r":  { "tex": "arm_r.png",  "pivot": [0.5, 1.0] },
+    "leg_l":  { "tex": "leg_l.png",  "pivot": [0.5, 1.0] },
+    "leg_r":  { "tex": "leg_r.png",  "pivot": [0.5, 1.0] }
+  },
+  "skeleton": [
+    { "name": "root",   "pos": [0, 0] },
+    { "name": "leg_l",  "parent": "root",  "pos": [0, 0], "z": -2 },
+    { "name": "leg_r",  "parent": "root",  "pos": [0, 0], "z": -1 },
+    { "name": "torso",  "parent": "root",  "pos": [0, 0], "z": 0 },
+    { "name": "arm_l",  "parent": "root",  "pos": [0, 0], "z": 1 },
+    { "name": "arm_r",  "parent": "root",  "pos": [0, 0], "z": 2 }
+  ],
+  "animations": {
+    "idle": {
+      "loop": true, "durationMs": 1400,
+      "tracks": {
+        "torso": [{ "t": 0, "y": 0 }, { "t": 700, "y": -8 }, { "t": 1400, "y": 0 }],
+        "arm_l": [{ "t": 0, "y": 0 }, { "t": 700, "y": -8 }, { "t": 1400, "y": 0 }],
+        "arm_r": [{ "t": 0, "y": 0 }, { "t": 700, "y": -8 }, { "t": 1400, "y": 0 }]
+      }
+    },
+    "walk": {
+      "loop": true, "durationMs": 460,
+      "tracks": {
+        "torso": [{ "t": 0, "y": 0, "rot": -2 }, { "t": 115, "y": -10, "rot": 2 }, { "t": 230, "y": 0, "rot": -2 }, { "t": 345, "y": -10, "rot": 2 }, { "t": 460, "y": 0, "rot": -2 }],
+        "arm_l": [{ "t": 0, "y": 0, "rot": -2 }, { "t": 115, "y": -10, "rot": 2 }, { "t": 230, "y": 0, "rot": -2 }, { "t": 345, "y": -10, "rot": 2 }, { "t": 460, "y": 0, "rot": -2 }],
+        "arm_r": [{ "t": 0, "y": 0, "rot": -2 }, { "t": 115, "y": -10, "rot": 2 }, { "t": 230, "y": 0, "rot": -2 }, { "t": 345, "y": -10, "rot": 2 }, { "t": 460, "y": 0, "rot": -2 }]
+      }
+    },
+    "light": {
+      "loop": false, "durationMs": 260,
+      "tracks": {
+        "torso": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 80, "x": 14, "rot": 10 }, { "t": 260, "x": 0, "rot": 0 }],
+        "arm_l": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 80, "x": 14, "rot": 10 }, { "t": 260, "x": 0, "rot": 0 }],
+        "arm_r": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 80, "x": 14, "rot": 10 }, { "t": 260, "x": 0, "rot": 0 }]
+      }
+    },
+    "heavy": {
+      "loop": false, "durationMs": 560,
+      "tracks": {
+        "torso": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 200, "x": 22, "rot": 18 }, { "t": 560, "x": 0, "rot": 0 }],
+        "arm_l": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 200, "x": 22, "rot": 18 }, { "t": 560, "x": 0, "rot": 0 }],
+        "arm_r": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 200, "x": 22, "rot": 18 }, { "t": 560, "x": 0, "rot": 0 }]
+      }
+    },
+    "special": {
+      "loop": false, "durationMs": 760,
+      "tracks": {
+        "torso": [{ "t": 0, "y": 0, "sx": 1, "sy": 1 }, { "t": 220, "y": -22, "sx": 1.12, "sy": 1.12 }, { "t": 760, "y": 0, "sx": 1, "sy": 1 }],
+        "arm_l": [{ "t": 0, "y": 0, "sx": 1, "sy": 1 }, { "t": 220, "y": -22, "sx": 1.12, "sy": 1.12 }, { "t": 760, "y": 0, "sx": 1, "sy": 1 }],
+        "arm_r": [{ "t": 0, "y": 0, "sx": 1, "sy": 1 }, { "t": 220, "y": -22, "sx": 1.12, "sy": 1.12 }, { "t": 760, "y": 0, "sx": 1, "sy": 1 }]
+      }
+    },
+    "hit": {
+      "loop": false, "durationMs": 220,
+      "tracks": {
+        "torso": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 80, "x": -14, "rot": -18 }, { "t": 220, "x": 0, "rot": 0 }],
+        "arm_l": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 80, "x": -14, "rot": -18 }, { "t": 220, "x": 0, "rot": 0 }],
+        "arm_r": [{ "t": 0, "x": 0, "rot": 0 }, { "t": 80, "x": -14, "rot": -18 }, { "t": 220, "x": 0, "rot": 0 }]
+      }
+    },
+    "jump": {
+      "loop": false, "durationMs": 400,
+      "tracks": {
+        "torso": [{ "t": 0, "y": 0 }, { "t": 200, "y": -32 }, { "t": 400, "y": 0 }],
+        "arm_l": [{ "t": 0, "y": 0 }, { "t": 200, "y": -32 }, { "t": 400, "y": 0 }],
+        "arm_r": [{ "t": 0, "y": 0 }, { "t": 200, "y": -32 }, { "t": 400, "y": 0 }],
+        "leg_l": [{ "t": 0, "y": 0 }, { "t": 200, "y": -22 }, { "t": 400, "y": 0 }],
+        "leg_r": [{ "t": 0, "y": 0 }, { "t": 200, "y": -22 }, { "t": 400, "y": 0 }]
+      }
+    },
+    "block": {
+      "loop": true, "durationMs": 600,
+      "tracks": {
+        "torso": [{ "t": 0, "sx": 0.94, "sy": 0.94 }],
+        "arm_l": [{ "t": 0, "sx": 0.94, "sy": 0.94 }],
+        "arm_r": [{ "t": 0, "sx": 0.94, "sy": 0.94 }]
+      }
+    },
+    "defeat": {
+      "loop": false, "durationMs": 600,
+      "tracks": {
+        "torso": [{ "t": 0, "rot": 0 }, { "t": 600, "rot": 90 }],
+        "arm_l": [{ "t": 0, "rot": 0 }, { "t": 600, "rot": 90 }],
+        "arm_r": [{ "t": 0, "rot": 0 }, { "t": 600, "rot": 90 }],
+        "leg_l": [{ "t": 0, "rot": 0 }, { "t": 600, "rot": 90 }],
+        "leg_r": [{ "t": 0, "rot": 0 }, { "t": 600, "rot": 90 }]
+      }
+    }
+  }
+}
