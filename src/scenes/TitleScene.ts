@@ -119,41 +119,48 @@ export class TitleScene extends Phaser.Scene {
     this.mode = 'host';
     this.clearScreen();
     const cx = GAME_WIDTH / 2;
-    this.add.text(cx, 180, 'HOSTING…', {
+    let y = 160;
+    this.add.text(cx, y, 'HOSTING…', {
       fontFamily: 'Impact', fontSize: '22px', color: '#ffd34a'
     }).setOrigin(0.5);
-    this.codeText = this.add.text(cx, 240, '------', {
+    y += 40;
+    this.codeText = this.add.text(cx, y, '------', {
       fontFamily: 'monospace', fontSize: '54px', color: '#ffffff', stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5);
-    this.add.text(cx, 290, 'share this code with friends', {
+    y += 54;
+    this.add.text(cx, y, 'share this code with friends', {
       fontFamily: 'Arial', fontSize: '12px', color: '#8aa0b8'
     }).setOrigin(0.5);
-    this.peerListText = this.add.text(cx, 330, 'Players:\n  1. ' + name + ' (you)', {
-      fontFamily: 'monospace', fontSize: '14px', color: '#cfd6e4', align: 'center'
-    }).setOrigin(0.5, 0);
-
+    y += 24;
+    // Copy link button below code
     try {
       const code = await getNet().host(name);
       this.codeText.setText(code);
-      this.makeButton(cx + 110, 240, 'COPY LINK', () => this.copyJoinLink(code))
+      this.makeButton(cx, y, 'COPY LINK', () => this.copyJoinLink(code))
         .setStyle({ fontSize: '14px', backgroundColor: '#2a3346' });
+      y += 36;
       // Host claims slot 1 = RED (index 0) by default; allow re-pick.
       this.picks = { 1: 0 };
       this.broadcastPicks();
-      this.buildPickTiles();
-      // Host: route incoming 'pick' messages by sender slot.
-      this.offHostPick?.();
-      this.offHostPick = getNet().on((m, fromSlot) => {
-        if (m.t === 'pick' && getNet().role === 'host') {
-          this.applyPickRequest(fromSlot, m.colorIndex);
-        }
-      });
-      this.makeButton(cx, GAME_HEIGHT - 90, 'START GAME', () => this.hostStart());
     } catch (e) {
       this.codeText.setText('FAILED');
       this.statusText.setText(`Host failed: ${(e as Error).message}`);
     }
-
+    // Player list
+    this.peerListText = this.add.text(cx, y, 'Players:\n  1. ' + name + ' (you)', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#cfd6e4', align: 'center'
+    }).setOrigin(0.5, 0);
+    y += 60;
+    // Color picker below player list
+    this.buildPickTiles(cx, y);
+    // Host: route incoming 'pick' messages by sender slot.
+    this.offHostPick?.();
+    this.offHostPick = getNet().on((m, fromSlot) => {
+      if (m.t === 'pick' && getNet().role === 'host') {
+        this.applyPickRequest(fromSlot, m.colorIndex);
+      }
+    });
+    this.makeButton(cx, GAME_HEIGHT - 90, 'START GAME', () => this.hostStart());
     this.makeButton(cx, GAME_HEIGHT - 50, 'BACK', () => { this.cleanupNet(); this.showMenu(); })
       .setStyle({ backgroundColor: '#3a2a2a' });
   }
@@ -179,21 +186,23 @@ export class TitleScene extends Phaser.Scene {
     this.clearScreen();
     const cx = GAME_WIDTH / 2;
 
-    this.add.text(cx, 200, 'JOINING ' + code + '…', {
+    let y = 160;
+    this.add.text(cx, y, 'JOINING ' + code + '…', {
       fontFamily: 'Impact', fontSize: '22px', color: '#ffd34a'
     }).setOrigin(0.5);
-    this.peerListText = this.add.text(cx, 260, 'Connecting…', {
+    y += 40;
+    this.peerListText = this.add.text(cx, y, 'Connecting…', {
       fontFamily: 'monospace', fontSize: '14px', color: '#cfd6e4', align: 'center'
     }).setOrigin(0.5, 0);
-
+    y += 60;
     try {
       await getNet().join(code, name);
       this.peerListText.setText('Connected. Pick your hero, then wait for host to start…');
-      this.buildPickTiles();
     } catch (e) {
       this.peerListText.setText(`Failed: ${(e as Error).message}`);
     }
-
+    // Color picker below player list
+    this.buildPickTiles(cx, y);
     this.makeButton(cx, GAME_HEIGHT - 50, 'BACK', () => { this.cleanupNet(); this.showMenu(); })
       .setStyle({ backgroundColor: '#3a2a2a' });
   }
@@ -300,10 +309,8 @@ export class TitleScene extends Phaser.Scene {
 
   // ----- Character picker -----
 
-  private buildPickTiles(): void {
+  private buildPickTiles(cx: number, y: number): void {
     if (this.pickTiles) { this.pickTiles.destroy(); this.pickTiles = null; }
-    const cx = GAME_WIDTH / 2;
-    const y = GAME_HEIGHT - 160;
     const tileW = 60;
     const gap = 16;
     const totalW = HERO_NAMES.length * tileW + (HERO_NAMES.length - 1) * gap;
@@ -311,19 +318,19 @@ export class TitleScene extends Phaser.Scene {
     const cont = this.add.container(0, 0);
     this.pickTiles = cont;
 
-    const label = this.add.text(cx, y - 30, 'PICK YOUR HERO', {
+    const label = this.add.text(cx, y, 'PICK YOUR HERO', {
       fontFamily: 'Impact', fontSize: '14px', color: '#cfd6e4'
     }).setOrigin(0.5);
     cont.add(label);
 
     for (let i = 0; i < HERO_NAMES.length; i++) {
       const tx = startX + i * (tileW + gap);
-      const rect = this.add.rectangle(tx, y, tileW, tileW, HERO_COLORS[i])
+      const rect = this.add.rectangle(tx, y + 38, tileW, tileW, HERO_COLORS[i])
         .setStrokeStyle(3, 0x000000).setInteractive({ useHandCursor: true });
-      const txt = this.add.text(tx, y, HERO_NAMES[i], {
+      const txt = this.add.text(tx, y + 38, HERO_NAMES[i], {
         fontFamily: 'Impact', fontSize: '12px', color: '#000', stroke: '#fff', strokeThickness: 2
       }).setOrigin(0.5);
-      const claimedBy = this.add.text(tx, y + tileW / 2 + 8, '', {
+      const claimedBy = this.add.text(tx, y + 38 + tileW / 2 + 8, '', {
         fontFamily: 'monospace', fontSize: '10px', color: HERO_COLORS_HEX[i]
       }).setOrigin(0.5, 0);
       cont.add(rect); cont.add(txt); cont.add(claimedBy);
